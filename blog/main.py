@@ -1,8 +1,9 @@
 from fastapi import FastAPI, Depends, status, Response, HTTPException
 from pydantic import BaseModel
-from .schemas import Blog
+from .schemas import Blog, ShowBlog
 from .database import engine, SessionLocal
 from sqlalchemy.orm import Session
+from typing import List
 from . import models
 
 app = FastAPI()
@@ -34,13 +35,13 @@ def create_blog(request: Blog, db: Session=Depends(get_db)):
     return new_blog
 
 
-@app.get('/blog')
+@app.get('/blog', response_model=ShowBlog)
 def list_blog(db: Session=Depends(get_db)):
     blogs = db.query(models.Blog).all()
     return blogs
 
 
-@app.get('/blog/{id}', status_code=status.HTTP_200_OK)
+@app.get('/blog/{id}', response_model=ShowBlog, status_code=status.HTTP_200_OK)
 def blog(id: int, db: Session=Depends(get_db)):
     blog = db.query(models.Blog).filter(models.Blog.id == id).first()
     if not blog:

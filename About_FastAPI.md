@@ -277,3 +277,22 @@ def blog(response:Response, id: int=1, db: Session=Depends(get_db)):
 ```
 
 ### Response Model
+
+*Using response model we can define a model for a response. In pydantic the correct terminology is Schema and not model. `The Sqlalchemy ones are called models and the pydnatic ones are called schemas`. There the response schema is response model. This response model is used for specifying the model fields to be show in the response.*
+
+```py
+class ShowBlog(Blog):
+    class Config:
+        from_attributes = True
+```
+
+```py
+@app.get('/blog/{id}', response_model=ShowBlog, status_code=status.HTTP_200_OK)
+def blog(id: int, db: Session=Depends(get_db)):
+    blog = db.query(models.Blog).filter(models.Blog.id == id).first()
+    if not blog:
+        raise_not_found(id=id)
+    return blog
+```
+
+*Now the response will only show name and body attributes of the blog model in response.*
