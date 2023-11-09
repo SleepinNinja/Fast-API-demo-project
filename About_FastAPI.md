@@ -1,5 +1,5 @@
-### About Fast API
-*Very fast compared to django and flask due to asynchronous code execution*
+# Fast API
+* *Very fast compared to django and flask as it is based on starlette(Light weight asgi framework ideal for building async web services in python) and pydantic(data validation library in python).*
 
 * *Auto documentation: By default provides Swagger UI for api documentation, it also provides ReDoc apart from Swagger UI*
 
@@ -103,3 +103,177 @@ class Blog(BaseModel):
 def create_blog(blog:Blog):
     return {'data': f'blog created with {blog}'}
 ```
+
+*This is how models are created to accept and and return response in the request body and response body*
+
+
+### Debugging
+We can use VS Code debugging tool for debugging of our Fast API project.
+
+### Running Fast API server on some other port
+```py
+import uvicorn
+
+if __name__ == '__main__':
+    uvicorn.run(app, host='127.0.0.1', port=9000)
+```
+*Now this will work on localhost and port 9000*
+
+
+### CRUD operations using Fast API.
+
+```py
+uvicorn blog.main:app --reload
+```
+*This is used for running the main file inside the blog app, also Sqlalchemy is one of the packages that used for performing CRUD operations on the database*
+
+```py
+from sqlalchemy import create_engine
+from sqlalchemy.ext.declarative import declerative_base
+from sqlalchemy.orm import sessionmaker
+
+
+SQLALCHEMY_DATABASE_URL = 'sqlite:///./blog.db'
+
+engine = create_engine(
+    echo=SQLALCHEMY_DATABASE_URL,
+    connection_args={
+        'check_same_thread': False,
+    }
+)
+
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+Base = declerative_base()
+```
+*Here we have completed our database connections, if we don't specify database URI and db name then it will store everything in memeory.*
+
+### Models and Tables
+*As we are using Sqlalchemy we will create modles which will contain all the columns that needs to be present in that table.*
+
+```py
+from .database import Base
+from sqlalchemy import Column, Integer, String
+
+
+class Blog(Base):
+    __tablename__ = 'blogs'
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String)
+    body = Column(String)
+```
+
+*Providing tablename is important else error is raised, also this tablename is the name of the table in our database.*
+
+```py
+models.Base.metadata.create_all(engine)
+```
+
+*This line is very important as it creates the tables it the database as defined in the models.py*
+
+```py
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db 
+    finally:
+        db.close()
+
+@app.post('/blog')
+def create(request: Blog, db: Session=Depends(get_db)):
+    return request
+```
+
+*This block of code means that db is type Session and the default_value depends on the the function get_db, if default value is not given then pydantic raises error.*
+
+### Create Operation
+```py
+@app.post('/blog')
+def create(request: Blog, db: Session=Depends(get_db)):
+    new_blog = models.Blog(
+        title = request.title,
+        body = request.body
+    )
+    db.add(new_blog)
+    db.commit()
+    db.refresh(new_blog)
+    return new_blog
+```
+
+## Read Operation
+
+```py
+@app.get('/blog')
+def all_blogs(db: Session=Depends(get_db)):
+    blogs = db.query(models.Blog).all()
+    return blogs
+```
+
+```py
+@app.get('/blog/{id}')
+def blog(id: int=1, db: Session=Depends(get_db)):
+    blog = db.query(models.Blog).filter(models.Blog.id == id).first()
+    return blog
+```
+
+
+### Delete Operation
+
+```py
+
+@app.delete('/blog/{id}', status_code=status.HTTP_204_NO_CONTENT)
+def delete_blog(id: int, db: Session=Depends(get_db)):
+    blog = db.query(models.Blog).filter(models.Blog.id == id)
+    if not blog.first():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'blog with id {id} does not exits.'
+        )
+    blog.delete(synchronize_session=False)
+    db.commit()
+    return {
+        'message': f'Blog with id {id} is deleted.'
+    }
+```
+
+### Update Operation
+```py
+def raise_not_found(id:int=None):
+    raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Blog with id {id} does not exists.'
+        )
+
+@app.put('/blog/{id}', status_code=status.HTTP_202_ACCEPTED)
+def update_blog(id:int, request: Blog, db: Session=Depends(get_db)):
+    print('calling blog update')
+    blog = db.query(models.Blog).filter(models.Blog.id == id)
+    if not blog.first():
+        raise_not_found(id=id)
+    blog.update(request.dict())
+    db.commit()
+    return f'Blog with id {id} updated successfully with data {request}'
+    
+```
+
+### Exception and Response Codes.
+
+```py
+from fastapi import HTTPException, Response
+
+
+@app.get('/blog/{id}', status_code=status.HTTP_200_OK)
+def blog(response:Response, id: int=1, db: Session=Depends(get_db)):
+    blog = db.query(models.Blog).filter(models.Blog.id == id).first()
+    if not blog:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f'Blog with id {id} does not exists.'
+        )
+        # * this can also be done using the below two lines
+        # response.status_code = status.HTTP_404_NOT_FOUND
+        # return {'detail': f'Blog with id {id} does not exits.'}
+    return blog
+```
+
+### Response Model
